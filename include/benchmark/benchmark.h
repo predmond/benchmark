@@ -139,8 +139,8 @@ BENCHMARK(BM_MultiThreaded)->Threads(4);
 
 #include <functional>
 #include <memory>
-#include <pthread.h>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "macros.h"
@@ -242,7 +242,6 @@ class State {
   void NewInterval();
   bool AllStarting();
 
-  static void* RunWrapper(void* arg);
   void Run();
   void RunAsThread();
   void Wait();
@@ -263,7 +262,7 @@ class State {
   // BenchmarkInstance
   SharedState* shared_;
 
-  pthread_t thread_;
+  std::thread thread_;
 
   // Custom label set by the user.
   std::string label_;

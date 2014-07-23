@@ -16,7 +16,6 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,19 +27,19 @@
 
 #include <iostream>
 #include <limits>
+#include <mutex>
 
 #include "benchmark/macros.h"
 #include "cycleclock.h"
-#include "mutex_lock.h"
 #include "sleep.h"
 
 namespace benchmark {
 namespace {
+
 const int64_t estimate_time_ms = 1000;
-pthread_once_t cpuinfo_init = PTHREAD_ONCE_INIT;
 double cpuinfo_cycles_per_second = 1.0;
 int cpuinfo_num_cpus = 1;  // Conservative guess
-pthread_mutex_t cputimens_mutex;
+std::mutex cputimens_mutex;
 
 #if !defined OS_MACOSX
 // Helper function estimates cycles/sec by observing cycles elapsed during
@@ -75,9 +74,6 @@ bool ReadIntFromFile(const char* file, int* value) {
 #endif
 
 void InitializeSystemInfo() {
-  // TODO: destroy this
-  pthread_mutex_init(&cputimens_mutex, NULL);
-
 #if defined OS_LINUX || defined OS_CYGWIN
   char line[1024];
   char* err;
@@ -270,6 +266,12 @@ void InitializeSystemInfo() {
   cpuinfo_cycles_per_second = EstimateCyclesPerSecond();
 #endif
 }
+
+void InitializeSystemInfoOnce() {
+  static std::once_flag flag;
+  std::call_once(flag, InitializeSystemInfo);
+}
+
 }  // end namespace
 
 #ifndef OS_WINDOWS
@@ -314,7 +316,7 @@ static bool MyCPUUsageCPUTimeNsLocked(double* cputime) {
 
 double MyCPUUsage() {
   {
-    mutex_lock l(&cputimens_mutex);
+    std::unique_lock<std::mutex> l(cputimens_mutex);
     static bool use_cputime_ns = true;
     if (use_cputime_ns) {
       double value;
@@ -343,12 +345,12 @@ double ChildrenCPUUsage() {
 #endif  // OS_WINDOWS
 
 double CyclesPerSecond(void) {
-  pthread_once(&cpuinfo_init, &InitializeSystemInfo);
+  InitializeSystemInfoOnce();
   return cpuinfo_cycles_per_second;
 }
 
 int NumCPUs(void) {
-  pthread_once(&cpuinfo_init, &InitializeSystemInfo);
+  InitializeSystemInfoOnce();
   return cpuinfo_num_cpus;
 }
 }  // end namespace benchmark
